@@ -15,22 +15,26 @@ jobs:
       - name: Baixar código do repositório
         uses: actions/checkout@v3
 
-      - name: Instalar yq (parser YAML)
+      - name: Mostrar conteúdo completo do live.yml
         run: |
-          sudo apt-get update
-          sudo apt-get install -y yq
-
-      - name: Ler arquivo live.yml e mostrar conteúdo completo
-        id: ler_yaml
-        run: |
-          echo "📄 Conteúdo do live.yml:"
+          echo "📄 Conteúdo bruto do arquivo data/live.yml:"
+          echo "---------------------------------------------"
           cat data/live.yml
+          echo "---------------------------------------------"
 
       - name: Extrair e decodificar rclone_conf
         run: |
-          RCLONE_B64=$(yq e '.rclone_conf' data/live.yml)
-          echo "🔑 Conteúdo base64 extraído do campo rclone_conf:"
-          echo "$RCLONE_B64"
+          echo "🔍 Extraindo campo 'rclone_conf' do arquivo..."
+
+          # Extrai apenas o valor base64 (assume que está em uma linha)
+          RCLONE_B64=$(grep '^rclone_conf:' data/live.yml | sed 's/^rclone_conf:[[:space:]]*//')
+
           echo
-          echo "📄 Conteúdo do rclone.conf decodificado:"
-          echo "$RCLONE_B64" | base64 --decode || echo "Falha ao decodificar"
+          echo "📦 Base64 extraído:"
+          echo "$RCLONE_B64"
+
+          echo
+          echo "🔓 Conteúdo decodificado (rclone.conf):"
+          echo "---------------------------------------------"
+          echo "$RCLONE_B64" | base64 --decode || echo "❌ Falha ao decodificar"
+          echo "---------------------------------------------"
