@@ -43,17 +43,31 @@ async function reencodeVideo(input, output) {
   console.log(`✅ Reencodado: ${output}`);
 }
 
+/**
+ * Garante que a pasta do caminho 'filePath' exista, criando-a se necessário
+ */
+function garantirPasta(filePath) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
 function baixarArquivo(remoto, destino, reencode = true) {
   return new Promise((resolve, reject) => {
     console.log(`⬇️ Baixando: ${remoto}`);
+    // baixa para o nome base temporário
+    const baseName = path.basename(remoto);
     const rclone = spawn('rclone', ['copy', `meudrive:${remoto}`, '.', '--config', keyFile]);
     rclone.stderr.on('data', d => process.stderr.write(d.toString()));
     rclone.on('close', async code => {
       if (code !== 0) return reject(new Error(`❌ Erro ao baixar ${remoto}`));
-      const base = path.basename(remoto);
-      if (!fs.existsSync(base)) return reject(new Error(`❌ Arquivo não encontrado: ${base}`));
-      fs.renameSync(base, destino);
-      console.log(`✅ Baixado e renomeado: ${destino}`);
+      if (!fs.existsSync(baseName)) return reject(new Error(`❌ Arquivo não encontrado: ${baseName}`));
+      // cria pasta para destino
+      garantirPasta(destino);
+      // move arquivo baixado para o caminho completo (incluindo pasta)
+      fs.renameSync(baseName, destino);
+      console.log(`✅ Baixado e movido para: ${destino}`);
       if (reencode && destino.endsWith('.mp4')) {
         const temp = destino.replace(/(\.[^.]+)$/, '_temp$1');
         await reencodeVideo(destino, temp);
@@ -70,7 +84,8 @@ async function sobreporImagem(videoPath, imagemPath, destino) {
   await executarFFmpeg([
     '-i', videoPath,
     '-i', imagemPath,
-    '-filter_complex', "[1][0]scale2ref=w=1250:h=ow/mdar[img][vid];[vid][img]overlay=x=15:y=main_h-overlay_h-15",
+    '-filter_complex',
+    "[1][0]scale2ref=w=1235:h=ow/mdar[img][vid];[vid][img]overlay=x=15:y=main_h-overlay_h-15",
     '-preset', 'veryfast',
     '-crf', '23',
     '-c:v', 'libx264',
@@ -85,7 +100,14 @@ async function sobreporImagem(videoPath, imagemPath, destino) {
 
 async function juntarVideos(arquivos, saida) {
   const lista = 'lista.txt';
-  fs.writeFileSync(lista, arquivos.map(a => `file '${a}'`).join('\n'));
+
+  // escreve o arquivo lista.txt usando os caminhos completos, escapando aspas simples
+  const conteudoLista = arquivos
+    .map(a => `file '${a.replace(/'/g, "'\\''")}'`)
+    .join('\n');
+
+  fs.writeFileSync(lista, conteudoLista);
+
   await executarFFmpeg([
     '-f', 'concat',
     '-safe', '0',
@@ -112,14 +134,13 @@ async function processarArquivos() {
 
   for (const par of pares) {
     const [videoPath, imagemPath] = par.split(',').map(p => p.trim());
-    const videoNome = path.basename(videoPath);
-    const imagemNome = path.basename(imagemPath);
 
+    // usa caminhos originais completos
     try {
-      await baixarArquivo(videoPath, videoNome, true);
-      await baixarArquivo(imagemPath, imagemNome, false);
-      const finalComImagem = videoNome.replace(/\.mp4$/, '_final.mp4');
-      await sobreporImagem(videoNome, imagemNome, finalComImagem);
+      await baixarArquivo(videoPath, videoPath, true);
+      await baixarArquivo(imagemPath, imagemPath, false);
+      const finalComImagem = videoPath.replace(/\.mp4$/, '_final.mp4');
+      await sobreporImagem(videoPath, imagemPath, finalComImagem);
       organizados.push(finalComImagem);
     } catch (err) {
       console.error(`❌ Erro ao processar ${videoPath} + ${imagemPath}:`, err.message);
@@ -137,4 +158,3 @@ processarArquivos().catch(err => {
   console.error('❌ Erro geral:', err.message);
   process.exit(1);
 });
-
