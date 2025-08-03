@@ -33,3 +33,30 @@ jobs:
           echo "${{ github.event.inputs.rclone_conf }}" | base64 -d > rclone.conf
           echo "📁 Conteúdo decodificado do rclone.conf:"
           cat rclone.conf
+
+  montar-video:
+    runs-on: ubuntu-latest
+    needs: run_live
+    steps:
+      - name: 📥 Clonar repositório
+        uses: actions/checkout@v4
+
+      - name: 📦 Instalar dependências
+        run: |
+          sudo apt update
+          sudo apt install -y ffmpeg jq rclone git curl
+          echo '{}' > package.json
+          npm install puppeteer
+
+      - name: 📄 Salvar rclone.conf
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ github.event.inputs.rclone_conf }}" | base64 -d > ~/.config/rclone/rclone.conf
+
+      - name: 📝 Criar input.json para o script JS
+        run: |
+          echo "{\"stream_url\": \"${{ github.event.inputs.stream_url }}\", \"arquivos\": \"${{ github.event.inputs.arquivos }}\"}" > input.json
+
+      - name: ▶️ Executar Music_unir.js
+        run: |
+          node Music_unir.js
