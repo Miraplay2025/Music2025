@@ -1,0 +1,36 @@
+name: Processar Live Config
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - data/live.yml
+
+jobs:
+  process_live_config:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar código do repositório
+        uses: actions/checkout@v3
+
+      - name: Instalar yq (parser YAML)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yq
+
+      - name: Ler arquivo live.yml e mostrar conteúdo completo
+        id: ler_yaml
+        run: |
+          echo "📄 Conteúdo do live.yml:"
+          cat data/live.yml
+
+      - name: Extrair e decodificar rclone_conf
+        run: |
+          RCLONE_B64=$(yq e '.rclone_conf' data/live.yml)
+          echo "🔑 Conteúdo base64 extraído do campo rclone_conf:"
+          echo "$RCLONE_B64"
+          echo
+          echo "📄 Conteúdo do rclone.conf decodificado:"
+          echo "$RCLONE_B64" | base64 --decode || echo "Falha ao decodificar"
