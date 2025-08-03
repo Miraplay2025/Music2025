@@ -3,7 +3,6 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
-// Caminho do rclone.conf
 const keyFile = path.join(os.homedir(), '.config', 'rclone', 'rclone.conf');
 const input = JSON.parse(fs.readFileSync('input.json', 'utf-8'));
 
@@ -70,7 +69,8 @@ async function sobreporImagem(videoPath, imagemPath, destino) {
   await executarFFmpeg([
     '-i', videoPath,
     '-i', imagemPath,
-    '-filter_complex', "[1][0]scale2ref=w=1250:h=ow/mdar[img][vid];[vid][img]overlay=x=15:y=main_h-overlay_h-15",
+    '-filter_complex',
+    "[1][0]scale2ref=w=1235:h=ow/mdar[img][vid];[vid][img]overlay=x=15:y=main_h-overlay_h-15",
     '-preset', 'veryfast',
     '-crf', '23',
     '-c:v', 'libx264',
@@ -98,12 +98,12 @@ async function juntarVideos(arquivos, saida) {
   const mb = (stats.size / (1024 * 1024)).toFixed(2);
   console.log(`📦 Vídeo final gerado: ${saida} (${mb} MB)`);
 
-  // Garante que a pasta de saída exista
   const saidaDir = path.join(__dirname, 'saida');
   if (!fs.existsSync(saidaDir)) fs.mkdirSync(saidaDir);
-  fs.renameSync(saida, path.join(saidaDir, 'video_final.mp4'));
+  const caminhoFinal = path.join(saidaDir, 'video_final.mp4');
+  fs.renameSync(saida, caminhoFinal);
 
-  console.log(`📎 Link de download será gerado pelo GitHub Actions (artifact): saida/video_final.mp4`);
+  console.log(`📎 Link de download será gerado via artifact: ${caminhoFinal}`);
 }
 
 async function processarArquivos() {
@@ -114,13 +114,13 @@ async function processarArquivos() {
     const [videoPath, imagemPath] = par.split(',').map(p => p.trim());
     const videoNome = path.basename(videoPath);
     const imagemNome = path.basename(imagemPath);
+    const saidaTemp = videoNome.replace(/\.mp4$/, '_com_img.mp4');
 
     try {
       await baixarArquivo(videoPath, videoNome, true);
       await baixarArquivo(imagemPath, imagemNome, false);
-      const finalComImagem = videoNome.replace(/\.mp4$/, '_final.mp4');
-      await sobreporImagem(videoNome, imagemNome, finalComImagem);
-      organizados.push(finalComImagem);
+      await sobreporImagem(videoNome, imagemNome, saidaTemp);
+      organizados.push(saidaTemp);
     } catch (err) {
       console.error(`❌ Erro ao processar ${videoPath} + ${imagemPath}:`, err.message);
     }
@@ -137,4 +137,3 @@ processarArquivos().catch(err => {
   console.error('❌ Erro geral:', err.message);
   process.exit(1);
 });
-      
