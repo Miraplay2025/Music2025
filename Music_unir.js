@@ -45,27 +45,70 @@ async function reencodeVideo(input, output) {
 function baixarArquivo(remoto, destino, reencode = true) {
   return new Promise((resolve, reject) => {
     console.log(`⬇️ Baixando: ${remoto}`);
+
+    // Remove arquivo antigo antes de baixar para evitar conflito
+    if (fs.existsSync(destino)) {
+      console.log(`🧹 Removendo arquivo local antigo: ${destino}`);
+      fs.unlinkSync(destino);
+    }
+
+    // Cria uma promise para o rclone copy
     const rclone = spawn('rclone', ['copy', `meudrive:${remoto}`, '.', '--config', keyFile]);
-    rclone.stderr.on('data', d => process.stderr.write(d.toString()));
-    rclone.on('close', async code => {
-      if (code !== 0) return reject(new Error(`❌ Erro ao baixar ${remoto}`));
+
+    let stderrData = '';
+    rclone.stderr.on('data', d => {
+      const text = d.toString();
+      stderrData += text;
+      process.stderr.write(text);
+    });
+
+    rclone.on('close', code => {
+      if (code !== 0) {
+        return reject(new Error(`❌ Erro ao baixar ${remoto}, código ${code}. Detalhes: ${stderrData}`));
+      }
+
+      // Procura pelo arquivo baixado com o nome original
       const base = path.basename(remoto);
-      if (!fs.existsSync(base)) return reject(new Error(`❌ Arquivo não encontrado: ${base}`));
+
+      if (!fs.existsSync(base)) {
+        return reject(new Error(`❌ Arquivo baixado não encontrado: ${base}`));
+      }
+
+      // Renomeia para o nome esperado (destino)
       fs.renameSync(base, destino);
       console.log(`✅ Baixado e renomeado: ${destino}`);
-      if (reencode && destino.endsWith('.mp4')) {
-        const temp = destino.replace(/(\.[^.]+)$/, '_temp$1');
-        await reencodeVideo(destino, temp);
-        fs.renameSync(temp, destino);
+
+      // Confirma tamanho e conteúdo mínimo para evitar arquivo vazio/corrompido
+      const stats = fs.statSync(destino);
+      if (stats.size < 1024) { // menos de 1KB? suspeito
+        return reject(new Error(`❌ Arquivo ${destino} muito pequeno (${stats.size} bytes), possivelmente corrompido`));
       }
-      registrarTemporario(destino);
-      resolve();
+
+      // Se for vídeo, reencode
+      (async () => {
+        if (reencode && destino.endsWith('.mp4')) {
+          const temp = destino.replace(/(\.[^.]+)$/, '_temp$1');
+          await reencodeVideo(destino, temp);
+          fs.renameSync(temp, destino);
+        }
+        registrarTemporario(destino);
+        resolve();
+      })().catch(reject);
     });
   });
 }
 
 async function sobreporImagem(videoPath, imagemPath, destino) {
   console.log(`🖼️ Sobrepondo imagem ${imagemPath} sobre ${videoPath}`);
+
+  // Verifica se arquivos existem antes de executar ffmpeg
+  if (!fs.existsSync(imagemPath)) {
+    throw new Error(`Arquivo de imagem não encontrado: ${imagemPath}`);
+  }
+  if (!fs.existsSync(videoPath)) {
+    throw new Error(`Arquivo de vídeo não encontrado: ${videoPath}`);
+  }
+
   await executarFFmpeg([
     '-i', imagemPath,   // imagem primeiro
     '-i', videoPath,    // vídeo segundo
@@ -137,3 +180,4 @@ processarArquivos().catch(err => {
   console.error('❌ Erro geral:', err.message);
   process.exit(1);
 });
+  
