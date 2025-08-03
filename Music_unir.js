@@ -5,32 +5,44 @@ const { spawn } = require('child_process');
 
 // Caminho do rclone.conf
 const keyFile = path.join(os.homedir(), '.config', 'rclone', 'rclone.conf');
-
-// Lê input.json
 const input = JSON.parse(fs.readFileSync('input.json', 'utf-8'));
 
 console.log('🔗 Stream URL:', input.stream_url);
 console.log('📄 Arquivos raw:', input.arquivos);
 
-// Simulação: registrar arquivos temporários
 function registrarTemporario(nome) {
   console.log(`🗂️ Registrado temporário: ${nome}`);
 }
 
-// Simulação: reencodar o vídeo
-function reencodeVideo(origem, destino) {
+function executarFFmpeg(args) {
   return new Promise((resolve, reject) => {
-    console.log(`🎞️ Reencodando: ${origem} -> ${destino}`);
-    const ffmpeg = spawn('ffmpeg', ['-i', origem, '-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'aac', '-y', destino]);
-    ffmpeg.stderr.on('data', d => process.stderr.write(d.toString()));
+    const ffmpeg = spawn('ffmpeg', [...args, '-y']);
+    ffmpeg.stderr.on('data', data => process.stderr.write(data.toString()));
     ffmpeg.on('close', code => {
-      if (code !== 0) return reject(new Error(`Erro ao reencodar ${origem}`));
+      if (code !== 0) return reject(new Error(`FFmpeg falhou com código ${code}`));
       resolve();
     });
   });
 }
 
-// Baixar com rclone
+async function reencodeVideo(input, output) {
+  console.log(`🔄 Reencodando ${input} → ${output}`);
+  await executarFFmpeg([
+    '-i', input,
+    '-vf', 'scale=1280:720,fps=60',
+    '-r', '60',
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '23',
+    '-acodec', 'aac',
+    '-b:a', '192k',
+    '-ar', '44100',
+    '-ac', '2',
+    output
+  ]);
+  console.log(`✅ Reencodado: ${output}`);
+}
+
 function baixarArquivo(remoto, destino, reencode = true) {
   return new Promise((resolve, reject) => {
     console.log(`⬇️ Baixando: ${remoto}`);
@@ -46,7 +58,6 @@ function baixarArquivo(remoto, destino, reencode = true) {
         const temp = destino.replace(/(\.[^.]+)$/, '_temp$1');
         await reencodeVideo(destino, temp);
         fs.renameSync(temp, destino);
-        console.log(`✅ Reencodado: ${destino}`);
       }
       registrarTemporario(destino);
       resolve();
@@ -54,10 +65,50 @@ function baixarArquivo(remoto, destino, reencode = true) {
   });
 }
 
-// Processamento dos pares de arquivos
+async function sobreporImagem(videoPath, imagemPath, destino) {
+  console.log(`🖼️ Sobrepondo imagem ${imagemPath} sobre ${videoPath}`);
+  await executarFFmpeg([
+    '-i', videoPath,
+    '-i', imagemPath,
+    '-filter_complex', "[1][0]scale2ref=w=1250:h=ow/mdar[img][vid];[vid][img]overlay=x=15:y=main_h-overlay_h-15",
+    '-preset', 'veryfast',
+    '-crf', '23',
+    '-c:v', 'libx264',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-ar', '44100',
+    '-ac', '2',
+    destino
+  ]);
+  console.log(`🎬 Criado vídeo com imagem sobreposta: ${destino}`);
+}
+
+async function juntarVideos(arquivos, saida) {
+  const lista = 'lista.txt';
+  fs.writeFileSync(lista, arquivos.map(a => `file '${a}'`).join('\n'));
+  await executarFFmpeg([
+    '-f', 'concat',
+    '-safe', '0',
+    '-i', lista,
+    '-c', 'copy',
+    saida
+  ]);
+
+  const stats = fs.statSync(saida);
+  const mb = (stats.size / (1024 * 1024)).toFixed(2);
+  console.log(`📦 Vídeo final gerado: ${saida} (${mb} MB)`);
+
+  // Garante que a pasta de saída exista
+  const saidaDir = path.join(__dirname, 'saida');
+  if (!fs.existsSync(saidaDir)) fs.mkdirSync(saidaDir);
+  fs.renameSync(saida, path.join(saidaDir, 'video_final.mp4'));
+
+  console.log(`📎 Link de download será gerado pelo GitHub Actions (artifact): saida/video_final.mp4`);
+}
+
 async function processarArquivos() {
-  const pares = input.arquivos.split(';').map(par => par.trim()).filter(Boolean);
-  const arquivosBaixados = [];
+  const pares = input.arquivos.split(';').map(p => p.trim()).filter(Boolean);
+  const organizados = [];
 
   for (const par of pares) {
     const [videoPath, imagemPath] = par.split(',').map(p => p.trim());
@@ -67,15 +118,18 @@ async function processarArquivos() {
     try {
       await baixarArquivo(videoPath, videoNome, true);
       await baixarArquivo(imagemPath, imagemNome, false);
-      arquivosBaixados.push({ video: videoNome, imagem: imagemNome });
+      const finalComImagem = videoNome.replace(/\.mp4$/, '_final.mp4');
+      await sobreporImagem(videoNome, imagemNome, finalComImagem);
+      organizados.push(finalComImagem);
     } catch (err) {
-      console.error(`❌ Erro ao processar par: ${videoPath} + ${imagemPath}\n`, err.message);
+      console.error(`❌ Erro ao processar ${videoPath} + ${imagemPath}:`, err.message);
     }
   }
 
-  console.log('\n📂 Arquivos baixados e organizados:');
-  for (const item of arquivosBaixados) {
-    console.log(`🎬 Vídeo: ${item.video} 🎨 Imagem: ${item.imagem}`);
+  if (organizados.length > 0) {
+    await juntarVideos(organizados, 'video_final.mp4');
+  } else {
+    console.error('⚠️ Nenhum vídeo disponível para juntar.');
   }
 }
 
@@ -83,3 +137,4 @@ processarArquivos().catch(err => {
   console.error('❌ Erro geral:', err.message);
   process.exit(1);
 });
+      
