@@ -67,10 +67,10 @@ function baixarArquivo(remoto, destino, reencode = true) {
 async function sobreporImagem(videoPath, imagemPath, destino) {
   console.log(`🖼️ Sobrepondo imagem ${imagemPath} sobre ${videoPath}`);
   await executarFFmpeg([
-    '-i', videoPath,
-    '-i', imagemPath,
+    '-i', imagemPath,   // imagem primeiro
+    '-i', videoPath,    // vídeo segundo
     '-filter_complex',
-    "[1][0]scale2ref=w=1235:h=ow/mdar[img][vid];[vid][img]overlay=x=15:y=main_h-overlay_h-15",
+    "[0][1]scale2ref=w=1235:h=ow/mdar[img][vid];[vid][img]overlay=x=15:y=main_h-overlay_h-15",
     '-preset', 'veryfast',
     '-crf', '23',
     '-c:v', 'libx264',
