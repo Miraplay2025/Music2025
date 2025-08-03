@@ -46,7 +46,6 @@ jobs:
           sudo apt update
           sudo apt install -y ffmpeg jq rclone git curl
           echo '{}' > package.json
-          npm install puppeteer
 
       - name: 📄 Salvar rclone.conf
         run: |
@@ -60,3 +59,9 @@ jobs:
       - name: ▶️ Executar Music_unir.js
         run: |
           node Music_unir.js
+
+      - name: 📤 Enviar vídeo final como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: video_final
+          path: saida/video_final.mp4
