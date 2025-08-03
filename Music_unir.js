@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
+// Caminho do rclone.conf
 const keyFile = path.join(os.homedir(), '.config', 'rclone', 'rclone.conf');
 const input = JSON.parse(fs.readFileSync('input.json', 'utf-8'));
 
@@ -45,75 +46,32 @@ async function reencodeVideo(input, output) {
 function baixarArquivo(remoto, destino, reencode = true) {
   return new Promise((resolve, reject) => {
     console.log(`⬇️ Baixando: ${remoto}`);
-
-    // Remove arquivo antigo antes de baixar para evitar conflito
-    if (fs.existsSync(destino)) {
-      console.log(`🧹 Removendo arquivo local antigo: ${destino}`);
-      fs.unlinkSync(destino);
-    }
-
-    // Cria uma promise para o rclone copy
     const rclone = spawn('rclone', ['copy', `meudrive:${remoto}`, '.', '--config', keyFile]);
-
-    let stderrData = '';
-    rclone.stderr.on('data', d => {
-      const text = d.toString();
-      stderrData += text;
-      process.stderr.write(text);
-    });
-
-    rclone.on('close', code => {
-      if (code !== 0) {
-        return reject(new Error(`❌ Erro ao baixar ${remoto}, código ${code}. Detalhes: ${stderrData}`));
-      }
-
-      // Procura pelo arquivo baixado com o nome original
+    rclone.stderr.on('data', d => process.stderr.write(d.toString()));
+    rclone.on('close', async code => {
+      if (code !== 0) return reject(new Error(`❌ Erro ao baixar ${remoto}`));
       const base = path.basename(remoto);
-
-      if (!fs.existsSync(base)) {
-        return reject(new Error(`❌ Arquivo baixado não encontrado: ${base}`));
-      }
-
-      // Renomeia para o nome esperado (destino)
+      if (!fs.existsSync(base)) return reject(new Error(`❌ Arquivo não encontrado: ${base}`));
       fs.renameSync(base, destino);
       console.log(`✅ Baixado e renomeado: ${destino}`);
-
-      // Confirma tamanho e conteúdo mínimo para evitar arquivo vazio/corrompido
-      const stats = fs.statSync(destino);
-      if (stats.size < 1024) { // menos de 1KB? suspeito
-        return reject(new Error(`❌ Arquivo ${destino} muito pequeno (${stats.size} bytes), possivelmente corrompido`));
+      if (reencode && destino.endsWith('.mp4')) {
+        const temp = destino.replace(/(\.[^.]+)$/, '_temp$1');
+        await reencodeVideo(destino, temp);
+        fs.renameSync(temp, destino);
       }
-
-      // Se for vídeo, reencode
-      (async () => {
-        if (reencode && destino.endsWith('.mp4')) {
-          const temp = destino.replace(/(\.[^.]+)$/, '_temp$1');
-          await reencodeVideo(destino, temp);
-          fs.renameSync(temp, destino);
-        }
-        registrarTemporario(destino);
-        resolve();
-      })().catch(reject);
+      registrarTemporario(destino);
+      resolve();
     });
   });
 }
 
 async function sobreporImagem(videoPath, imagemPath, destino) {
   console.log(`🖼️ Sobrepondo imagem ${imagemPath} sobre ${videoPath}`);
-
-  // Verifica se arquivos existem antes de executar ffmpeg
-  if (!fs.existsSync(imagemPath)) {
-    throw new Error(`Arquivo de imagem não encontrado: ${imagemPath}`);
-  }
-  if (!fs.existsSync(videoPath)) {
-    throw new Error(`Arquivo de vídeo não encontrado: ${videoPath}`);
-  }
-
   await executarFFmpeg([
-    '-i', imagemPath,   // imagem primeiro
-    '-i', videoPath,    // vídeo segundo
+    '-i', videoPath,
+    '-i', imagemPath,
     '-filter_complex',
-    "[0][1]scale2ref=w=1235:h=ow/mdar[img][vid];[vid][img]overlay=x=15:y=main_h-overlay_h-15",
+    "[1][0]scale2ref=w=1235:h=ow/mdar[img][vid];[vid][img]overlay=x=15:y=main_h-overlay_h-15",
     '-preset', 'veryfast',
     '-crf', '23',
     '-c:v', 'libx264',
@@ -141,12 +99,12 @@ async function juntarVideos(arquivos, saida) {
   const mb = (stats.size / (1024 * 1024)).toFixed(2);
   console.log(`📦 Vídeo final gerado: ${saida} (${mb} MB)`);
 
+  // Garante que a pasta de saída exista
   const saidaDir = path.join(__dirname, 'saida');
   if (!fs.existsSync(saidaDir)) fs.mkdirSync(saidaDir);
-  const caminhoFinal = path.join(saidaDir, 'video_final.mp4');
-  fs.renameSync(saida, caminhoFinal);
+  fs.renameSync(saida, path.join(saidaDir, 'video_final.mp4'));
 
-  console.log(`📎 Link de download será gerado via artifact: ${caminhoFinal}`);
+  console.log(`📎 Link de download será gerado pelo GitHub Actions (artifact): saida/video_final.mp4`);
 }
 
 async function processarArquivos() {
@@ -157,13 +115,13 @@ async function processarArquivos() {
     const [videoPath, imagemPath] = par.split(',').map(p => p.trim());
     const videoNome = path.basename(videoPath);
     const imagemNome = path.basename(imagemPath);
-    const saidaTemp = videoNome.replace(/\.mp4$/, '_com_img.mp4');
 
     try {
       await baixarArquivo(videoPath, videoNome, true);
       await baixarArquivo(imagemPath, imagemNome, false);
-      await sobreporImagem(videoNome, imagemNome, saidaTemp);
-      organizados.push(saidaTemp);
+      const finalComImagem = videoNome.replace(/\.mp4$/, '_final.mp4');
+      await sobreporImagem(videoNome, imagemNome, finalComImagem);
+      organizados.push(finalComImagem);
     } catch (err) {
       console.error(`❌ Erro ao processar ${videoPath} + ${imagemPath}:`, err.message);
     }
@@ -180,4 +138,5 @@ processarArquivos().catch(err => {
   console.error('❌ Erro geral:', err.message);
   process.exit(1);
 });
+
   
