@@ -1,40 +1,6 @@
-name: Processar Live Config
-
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - data/live.yml
-
-jobs:
-  process_live_config:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Baixar código do repositório
-        uses: actions/checkout@v3
-
-      - name: Mostrar conteúdo completo do live.yml
-        run: |
-          echo "📄 Conteúdo bruto do arquivo data/live.yml:"
-          echo "---------------------------------------------"
-          cat data/live.yml
-          echo "---------------------------------------------"
-
-      - name: Extrair e decodificar rclone_conf
-        run: |
-          echo "🔍 Extraindo campo 'rclone_conf' do arquivo..."
-
-          # Extrai apenas o valor base64 (assume que está em uma linha)
-          RCLONE_B64=$(grep '^rclone_conf:' data/live.yml | sed 's/^rclone_conf:[[:space:]]*//')
-
-          echo
-          echo "📦 Base64 extraído:"
-          echo "$RCLONE_B64"
-
-          echo
-          echo "🔓 Conteúdo decodificado (rclone.conf):"
-          echo "---------------------------------------------"
-          echo "$RCLONE_B64" | base64 --decode || echo "❌ Falha ao decodificar"
-          echo "---------------------------------------------"
+stream_url: "rtmp://live-api-s.facebook.com:80/rtmp/FB-1227496392483984-0-Ab2Cn1DC3ZBDgvJkQGe8AZdm"
+arquivos:
+  - "Clube de fá/9e64c79891.mp4, Clube de fá/e0f2db543d_titulo.jpg"
+  - "Clube de fá/2ab5f6d351.mp4, Clube de fá/3a15a60328_titulo.png"
+  - "Clube de fá/ukrzl2c5y0.mp4, Clube de fá/dvfa95jb_titulo.png"
+rclone_conf: "W21ldWRyaXZlXQp0eXBlID0gZHJpdmUKY2xpZW50X2lkID0gOTQ1MTI0NjI0MzQ0LW1pZjQ1YXZvNDYxOTQ0a3ExcjdkMWtzaTIzdTBiMnI4LmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tCmNsaWVudF9zZWNyZXQgPSBHT0NTUFgtRGRpQS0zbkNCb0hIX1A0dkREdHRkTmFuOW5BSQpzY29wZSA9IGRyaXZlCnRva2VuID0geyJhY2Nlc3NfdG9rZW4iOiJ5YTI5LkEwQVMzSDZOd0ZQa3UyQ3hRRURzMEplNDFpcG1aejVOakdhenNYU0ViZVlLVjFYUzJTaDFtc1NmajdfVzNiNWdscU1lck01RnJaUzhDSDNVMzR6XzByYmlTVURzbzh0UkV3TkdyelM4M01ReXp5aG9EYkYxd3NwZXlETkQ4WFVhWTdYMHdLTHZfVFlQX0lDMjdCMkNQQ2ZRVFhxRkUtYlVocUVtOHdGYVNiWjl1QVhrOWduV3FCNmlvRlVtSnZjYjUtbEtGUjNvSWFDZ1lLQVRvU0FSUVNGUUhHWDJNaUR5Y3lESmtjWUN3RXpodmRBRTVYOWcwMjA2IiwidG9rZW5fdHlwZSI6IkJlYXJlciIsInJlZnJlc2hfdG9rZW4iOiIxLy8wM1ZvckRLQm9sVGUzQ2dZSUFSQUFHQU1TTndGLUw5SXJEWDRuQWVsQVp0WHM5Wm5aWkROLTFGckZrSkx0Sm1OTXZONWFYLW4xZ3pYeE1SSjdnZGNzczNmQ3JRc1pIUGV2X244IiwiZXhwaXJ5IjoiMjAyNS0wNy0yOFQxMjo0NTo0Mi4xMzgyOTU5MloiLCJleHBpcmVzX2luIjozNTk4fQ=="
