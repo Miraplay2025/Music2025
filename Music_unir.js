@@ -26,7 +26,7 @@ function garantirPasta(filePath) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-// Reencoda o vídeo e sobrepõe a imagem como rodapé centralizado
+// Reencoda o vídeo com a proporção desejada e sobrepõe a imagem no rodapé centralizado
 async function reencodeEOverlay(inputVideo, inputImage, outputVideo) {
   console.log(`🎬 Reencodando e sobrepondo imagem como rodapé em ${inputVideo}`);
   garantirPasta(outputVideo);
@@ -34,11 +34,13 @@ async function reencodeEOverlay(inputVideo, inputImage, outputVideo) {
   await executarFFmpeg([
     '-i', inputVideo,
     '-i', inputImage,
-    '-filter_complex', '[1]scale=1235:-1[img];[0][img]overlay=(W-w)/2:H-h',
+    '-filter_complex', '[0]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2[v];[1]scale=1235:-1[img];[v][img]overlay=(W-w)/2:H-h',
+    '-map', '[v]',
+    '-map', '0:a?',
     '-c:v', 'libx264',
     '-preset', 'veryfast',
     '-crf', '23',
-    '-r', '60',
+    '-r', '30',
     '-c:a', 'aac',
     '-b:a', '192k',
     '-ar', '44100',
@@ -118,3 +120,4 @@ function baixarArquivo(remoto, destino) {
 
   console.log(`🎉 Vídeo final salvo em: ${videoFinal}`);
 })();
+  
