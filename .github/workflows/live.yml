@@ -1,4 +1,4 @@
-name: Live Config
+ name: Live Config
 
 on:
   workflow_dispatch:
@@ -58,14 +58,7 @@ jobs:
 
       - name: ▶️ Executar Music_unir.js
         run: |
-          mkdir -p saida
           node Music_unir.js
-          if [ -f "video_final.mp4" ]; then
-            mv video_final.mp4 saida/video_final.mp4
-          else
-            echo "❌ Erro: vídeo final não foi gerado!"
-            exit 1
-          fi
 
       - name: 📤 Enviar vídeo final como artefato
         if: success()
