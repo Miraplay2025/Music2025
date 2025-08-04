@@ -3,7 +3,6 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
-// Caminho do rclone.conf
 const keyFile = path.join(os.homedir(), '.config', 'rclone', 'rclone.conf');
 const input = JSON.parse(fs.readFileSync('input.json', 'utf-8'));
 
@@ -43,9 +42,6 @@ async function reencodeVideo(input, output) {
   console.log(`✅ Reencodado: ${output}`);
 }
 
-/**
- * Garante que a pasta do caminho 'filePath' exista, criando-a se necessário
- */
 function garantirPasta(filePath) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
@@ -56,23 +52,27 @@ function garantirPasta(filePath) {
 function baixarArquivo(remoto, destino, reencode = true) {
   return new Promise((resolve, reject) => {
     console.log(`⬇️ Baixando: ${remoto}`);
-    // baixa para o nome base temporário
     const baseName = path.basename(remoto);
     const rclone = spawn('rclone', ['copy', `meudrive:${remoto}`, '.', '--config', keyFile]);
     rclone.stderr.on('data', d => process.stderr.write(d.toString()));
     rclone.on('close', async code => {
       if (code !== 0) return reject(new Error(`❌ Erro ao baixar ${remoto}`));
       if (!fs.existsSync(baseName)) return reject(new Error(`❌ Arquivo não encontrado: ${baseName}`));
-      // cria pasta para destino
+
       garantirPasta(destino);
-      // move arquivo baixado para o caminho completo (incluindo pasta)
       fs.renameSync(baseName, destino);
       console.log(`✅ Baixado e movido para: ${destino}`);
-      if (reencode && destino.endsWith('.mp4')) {
+
+      const ext = path.extname(destino).toLowerCase();
+
+      if (reencode && ['.mp4', '.mov', '.mkv', '.avi'].includes(ext)) {
         const temp = destino.replace(/(\.[^.]+)$/, '_temp$1');
         await reencodeVideo(destino, temp);
         fs.renameSync(temp, destino);
+      } else if (!['.jpg', '.jpeg', '.png', '.bmp', '.webp'].includes(ext)) {
+        console.warn(`⚠️ Tipo de arquivo não reconhecido como vídeo ou imagem: ${ext}`);
       }
+
       registrarTemporario(destino);
       resolve();
     });
@@ -101,7 +101,6 @@ async function sobreporImagem(videoPath, imagemPath, destino) {
 async function juntarVideos(arquivos, saida) {
   const lista = 'lista.txt';
 
-  // escreve o arquivo lista.txt usando os caminhos completos, escapando aspas simples
   const conteudoLista = arquivos
     .map(a => `file '${a.replace(/'/g, "'\\''")}'`)
     .join('\n');
@@ -120,7 +119,6 @@ async function juntarVideos(arquivos, saida) {
   const mb = (stats.size / (1024 * 1024)).toFixed(2);
   console.log(`📦 Vídeo final gerado: ${saida} (${mb} MB)`);
 
-  // Garante que a pasta de saída exista
   const saidaDir = path.join(__dirname, 'saida');
   if (!fs.existsSync(saidaDir)) fs.mkdirSync(saidaDir);
   fs.renameSync(saida, path.join(saidaDir, 'video_final.mp4'));
@@ -135,8 +133,19 @@ async function processarArquivos() {
   for (const par of pares) {
     const [videoPath, imagemPath] = par.split(',').map(p => p.trim());
 
-    // usa caminhos originais completos
     try {
+      const extVideo = path.extname(videoPath).toLowerCase();
+      const extImagem = path.extname(imagemPath).toLowerCase();
+
+      if (!['.mp4', '.mov', '.mkv'].includes(extVideo)) {
+        console.warn(`⚠️ Ignorado: ${videoPath} não é um vídeo suportado`);
+        continue;
+      }
+      if (!['.jpg', '.jpeg', '.png', '.webp'].includes(extImagem)) {
+        console.warn(`⚠️ Ignorado: ${imagemPath} não é uma imagem suportada`);
+        continue;
+      }
+
       await baixarArquivo(videoPath, videoPath, true);
       await baixarArquivo(imagemPath, imagemPath, false);
       const finalComImagem = videoPath.replace(/\.mp4$/, '_final.mp4');
@@ -158,3 +167,4 @@ processarArquivos().catch(err => {
   console.error('❌ Erro geral:', err.message);
   process.exit(1);
 });
+        
