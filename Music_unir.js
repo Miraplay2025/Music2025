@@ -1,4 +1,4 @@
-const fs = require('fs');
+    const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -115,11 +115,17 @@ async function juntarVideos(arquivos, saida) {
   const mb = (stats.size / (1024 * 1024)).toFixed(2);
   console.log(`📦 Vídeo final gerado: ${saida} (${mb} MB)`);
 
+  // Garantir pasta saida
   const saidaDir = path.join(__dirname, 'saida');
   garantirPasta(saidaDir);
 
+  // Mover para saida/video_final.mp4
   const videoFinal = path.join(saidaDir, 'video_final.mp4');
-  fs.renameSync(saida, videoFinal);
+
+  // Se o arquivo já estiver no local correto, não renomeia
+  if (path.resolve(saida) !== path.resolve(videoFinal)) {
+    fs.renameSync(saida, videoFinal);
+  }
 
   console.log(`📎 Artefato salvo: ${videoFinal}`);
 }
@@ -153,7 +159,8 @@ async function processarArquivos() {
 
       await baixarArquivo(videoPath, videoPath, true);
       await baixarArquivo(imagemPath, imagemPath, false);
-      const finalComImagem = videoPath.replace(/\.mp4$/, '_final.mp4');
+
+      const finalComImagem = videoPath.replace(/(\.[^.]+)$/, '_final$1');
       await sobreporImagem(videoPath, imagemPath, finalComImagem);
       organizados.push(finalComImagem);
     } catch (err) {
@@ -162,7 +169,7 @@ async function processarArquivos() {
   }
 
   if (organizados.length > 0) {
-    await juntarVideos(organizados, 'video_final.mp4');
+    await juntarVideos(organizados, 'video_final_temp.mp4');
   } else {
     console.error('⚠️ Nenhum vídeo disponível para juntar.');
   }
