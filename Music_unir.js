@@ -100,11 +100,7 @@ async function sobreporImagem(videoPath, imagemPath, destino) {
 
 async function juntarVideos(arquivos, saida) {
   const lista = 'lista.txt';
-
-  const conteudoLista = arquivos
-    .map(a => `file '${a.replace(/'/g, "'\\''")}'`)
-    .join('\n');
-
+  const conteudoLista = arquivos.map(a => `file '${a.replace(/'/g, "'\\''")}'`).join('\n');
   fs.writeFileSync(lista, conteudoLista);
 
   await executarFFmpeg([
@@ -132,7 +128,7 @@ async function processarArquivos() {
   const pares = input.arquivos.split(';').map(p => p.trim()).filter(Boolean);
   const organizados = [];
 
-  // 🔧 Cria antecipadamente todas as pastas dos arquivos listados
+  // 🔧 Cria antecipadamente as pastas
   for (const par of pares) {
     const [videoPath, imagemPath] = par.split(',').map(p => p.trim());
     if (videoPath) garantirPasta(videoPath);
@@ -177,4 +173,3 @@ processarArquivos().catch(err => {
   console.error('❌ Erro geral:', err.message);
   process.exit(1);
 });
-
