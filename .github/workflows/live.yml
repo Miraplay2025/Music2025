@@ -1,4 +1,4 @@
- name: Live Config
+name: Live Config
 
 on:
   workflow_dispatch:
@@ -77,4 +77,4 @@ jobs:
           rm -rf temp
           rm -rf saida
           echo "🧼 Limpeza completa!"
-          
+           
