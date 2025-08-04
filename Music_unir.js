@@ -1,14 +1,17 @@
-        const fs = require('fs');
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
+// Caminho do rclone.conf
 const keyFile = path.join(os.homedir(), '.config', 'rclone', 'rclone.conf');
-const input = JSON.parse(fs.readFileSync('input.json', 'utf-8'));
 
+// Ler dados do input.json
+const input = JSON.parse(fs.readFileSync('input.json', 'utf-8'));
 console.log('🔗 Stream URL:', input.stream_url);
 console.log('📄 Arquivos raw:', input.arquivos);
 
+// Função para executar comandos do FFmpeg
 function executarFFmpeg(args) {
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', args, { stdio: 'inherit' });
@@ -19,6 +22,7 @@ function executarFFmpeg(args) {
   });
 }
 
+// Função para reencodar o vídeo
 async function reencodeVideo(input, output) {
   console.log(`🔄 Reencodando ${input} → ${output}`);
   await executarFFmpeg([
@@ -37,16 +41,19 @@ async function reencodeVideo(input, output) {
   console.log(`✅ Reencodado: ${output}`);
 }
 
+// Função para garantir que a pasta existe
 function garantirPasta(filePath) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
+// Função para baixar arquivos com rclone
 function baixarArquivo(remoto, destino) {
   return new Promise((resolve, reject) => {
     console.log(`⬇️ Baixando: ${remoto}`);
     const baseName = path.basename(remoto);
     const rclone = spawn('rclone', ['copy', `meudrive:${remoto}`, '.', '--config', keyFile]);
+
     rclone.stderr.on('data', d => process.stderr.write(d.toString()));
     rclone.on('close', code => {
       if (code !== 0) return reject(new Error(`❌ Erro ao baixar ${remoto}`));
@@ -60,7 +67,12 @@ function baixarArquivo(remoto, destino) {
   });
 }
 
+// Execução principal
 (async () => {
+  // Criar pastas principais
+  garantirPasta('saida/dummy.txt');
+  garantirPasta('temp/dummy.txt');
+
   const grupos = input.arquivos.split(';').map(p => p.trim()).filter(Boolean);
 
   for (const grupo of grupos) {
@@ -75,6 +87,7 @@ function baixarArquivo(remoto, destino) {
 
     try {
       await baixarArquivo(videoRaw, videoDestino);
+      garantirPasta(reencodedDestino); // 🔧 Garante que a pasta existe antes do reencode
       await reencodeVideo(videoDestino, reencodedDestino);
       await baixarArquivo(imagemRaw, imagemDestino);
 
@@ -87,4 +100,3 @@ function baixarArquivo(remoto, destino) {
 
   console.log('✅ Todos os vídeos foram processados.');
 })();
-
