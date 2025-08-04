@@ -1,3 +1,39 @@
+name: Live Config
+
+on:
+  workflow_dispatch:
+    inputs:
+      stream_url:
+        description: 'URL do Stream'
+        required: true
+        default: ''
+      arquivos:
+        description: 'Lista de arquivos'
+        required: true
+        default: ''
+      rclone_conf:
+        description: 'rclone.conf em Base64'
+        required: true
+        default: ''
+
+jobs:
+  run_live:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exibir dados da Live
+        run: |
+          echo "🔗 URL Stream: ${{ github.event.inputs.stream_url }}"
+          echo "📄 Caminhos dos arquivos:"
+          echo "${{ github.event.inputs.arquivos }}"
+          echo "🔐 rclone.conf (Base64):"
+          echo "${{ github.event.inputs.rclone_conf }}"
+
+      - name: Decodificar rclone.conf e exibir
+        run: |
+          echo "${{ github.event.inputs.rclone_conf }}" | base64 -d > rclone.conf
+          echo "📁 Conteúdo decodificado do rclone.conf:"
+          cat rclone.conf
+
   montar-video:
     runs-on: ubuntu-latest
     needs: run_live
@@ -21,9 +57,7 @@
           echo "{\"stream_url\": \"${{ github.event.inputs.stream_url }}\", \"arquivos\": \"${{ github.event.inputs.arquivos }}\"}" > input.json
 
       - name: ▶️ Executar Music_unir.js
-        id: executar_js
         run: |
-          set -e
           node Music_unir.js
 
       - name: 📤 Enviar vídeo final como artefato
@@ -33,18 +67,14 @@
           name: video_final
           path: saida/video_final.mp4
 
-      - name: 🧹 Limpeza final
+      - name: 🧹 Limpar arquivos temporários (sempre)
         if: always()
         run: |
-          echo ""
-          echo "🧹 Limpando arquivos temporários..."
-
-          rm -rf temp/ saida/ input.json rclone.conf
-          echo "🗑️ Arquivos removidos."
-
-          if [ "${{ steps.executar_js.outcome }}" = "success" ]; then
-            echo "✅ Processo concluído com sucesso!"
-          else
-            echo "❌ Ocorreu um erro durante o processamento."
-          fi
-        
+          echo "🧹 Limpando arquivos..."
+          rm -rf input.json
+          rm -rf rclone.conf
+          rm -rf ~/.config/rclone
+          rm -rf temp
+          rm -rf saida
+          echo "🧼 Limpeza completa!"
+  
