@@ -47,8 +47,8 @@ async function reencodeVideo(input, output) {
 // Sobrepõe imagem como rodapé centralizado (largura 1235px)
 async function sobreporImagem(videoPath, imagemPath, destino) {
   console.log(`🖼️ Sobrepondo imagem ${imagemPath} sobre ${videoPath}`);
-  
-  const enableOverlay = 'between(t,0,9999)'; // sempre visível (ou personalize)
+
+  const enableOverlay = 'between(t,0,9999)';
 
   await executarFFmpeg([
     '-i', videoPath,
@@ -73,15 +73,19 @@ function baixarArquivo(remoto, destino) {
   return new Promise((resolve, reject) => {
     console.log(`⬇️ Baixando: ${remoto}`);
     const baseName = path.basename(remoto);
-    const rclone = spawn('rclone', ['copy', `meudrive:${remoto}`, '.', '--config', keyFile]);
+    const tempDownload = `temp/${baseName}`;
+
+    const rclone = spawn('rclone', ['copy', `meudrive:${remoto}`, 'temp', '--config', keyFile]);
 
     rclone.stderr.on('data', d => process.stderr.write(d.toString()));
     rclone.on('close', code => {
+      const downloadedPath = path.resolve(tempDownload);
+
       if (code !== 0) return reject(new Error(`❌ Erro ao baixar ${remoto}`));
-      if (!fs.existsSync(baseName)) return reject(new Error(`❌ Arquivo não encontrado: ${baseName}`));
+      if (!fs.existsSync(downloadedPath)) return reject(new Error(`❌ Arquivo não encontrado: ${downloadedPath}`));
 
       garantirPasta(destino);
-      fs.renameSync(baseName, destino);
+      fs.renameSync(downloadedPath, destino);
       console.log(`✅ Baixado e movido para: ${destino}`);
       resolve(destino);
     });
