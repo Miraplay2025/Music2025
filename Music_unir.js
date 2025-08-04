@@ -9,7 +9,7 @@ const input = JSON.parse(fs.readFileSync('input.json', 'utf-8'));
 console.log('🔗 Stream URL:', input.stream_url);
 console.log('📄 Arquivos raw:', input.arquivos);
 
-// Executa o FFmpeg com os argumentos fornecidos
+// Executa FFmpeg com args
 function executarFFmpeg(args) {
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', args, { stdio: 'inherit' });
@@ -20,13 +20,13 @@ function executarFFmpeg(args) {
   });
 }
 
-// Garante que a pasta de destino exista
+// Garante que pastas existam
 function garantirPasta(filePath) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-// Reencoda vídeo para 1280x720 @ 60fps
+// Reencoda vídeo para 720p @ 60fps
 async function reencodeVideo(input, output) {
   console.log(`🔄 Reencodando ${input} → ${output}`);
   await executarFFmpeg([
@@ -44,14 +44,19 @@ async function reencodeVideo(input, output) {
   ]);
 }
 
-// Sobrepõe imagem no canto inferior com largura 1235px
+// Sobrepõe imagem como rodapé centralizado (largura 1235px)
 async function sobreporImagem(videoPath, imagemPath, destino) {
   console.log(`🖼️ Sobrepondo imagem ${imagemPath} sobre ${videoPath}`);
+  
+  const enableOverlay = 'between(t,0,9999)'; // sempre visível (ou personalize)
+
   await executarFFmpeg([
     '-i', videoPath,
     '-i', imagemPath,
     '-filter_complex',
-    "[1][0]scale2ref=w=1235:h=ow/mdar[img][vid];[vid][img]overlay=x=15:y=main_h-overlay_h-15",
+    `[1:v]scale=1235:-1[rodape];[0:v]setpts=PTS-STARTPTS[base];[base][rodape]overlay=enable='${enableOverlay}':x=0:y=H-h[outv]`,
+    '-map', '[outv]',
+    '-map', '0:a?',
     '-c:v', 'libx264',
     '-preset', 'veryfast',
     '-crf', '23',
@@ -63,7 +68,7 @@ async function sobreporImagem(videoPath, imagemPath, destino) {
   ]);
 }
 
-// Baixa um arquivo remoto via Rclone e move para o destino
+// Baixa um arquivo via Rclone
 function baixarArquivo(remoto, destino) {
   return new Promise((resolve, reject) => {
     console.log(`⬇️ Baixando: ${remoto}`);
@@ -85,7 +90,6 @@ function baixarArquivo(remoto, destino) {
 
 // Função principal
 (async () => {
-  // Criar pastas no início
   garantirPasta('temp/dummy');
   garantirPasta('saida/dummy');
 
@@ -94,7 +98,6 @@ function baixarArquivo(remoto, destino) {
 
   for (const grupo of grupos) {
     const [videoRaw, imagemRaw] = grupo.split(',').map(p => p.trim());
-
     const videoName = path.basename(videoRaw);
     const imagemName = path.basename(imagemRaw);
 
@@ -121,11 +124,9 @@ function baixarArquivo(remoto, destino) {
     process.exit(1);
   }
 
-  // Criar arquivo de concatenação
   const listaConcat = 'temp/lista.txt';
   fs.writeFileSync(listaConcat, arquivosFinais.map(f => `file '${path.resolve(f)}'`).join('\n'));
 
-  // Concatenar os vídeos
   const videoFinal = 'saida/video_final.mp4';
   console.log('🔗 Unindo vídeos...');
   await executarFFmpeg([
