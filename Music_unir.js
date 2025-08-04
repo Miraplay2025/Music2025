@@ -9,7 +9,7 @@ const input = JSON.parse(fs.readFileSync('input.json', 'utf-8'));
 console.log('🔗 Stream URL:', input.stream_url);
 console.log('📄 Arquivos raw:', input.arquivos);
 
-// Executa FFmpeg com args
+// Executa o FFmpeg com os argumentos fornecidos
 function executarFFmpeg(args) {
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', args, { stdio: 'inherit' });
@@ -20,13 +20,13 @@ function executarFFmpeg(args) {
   });
 }
 
-// Garante que pastas existam
+// Garante que a pasta de destino exista
 function garantirPasta(filePath) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-// Reencoda vídeo para 720p @ 60fps
+// Reencoda vídeo para 1280x720 @ 60fps
 async function reencodeVideo(input, output) {
   console.log(`🔄 Reencodando ${input} → ${output}`);
   await executarFFmpeg([
@@ -44,10 +44,9 @@ async function reencodeVideo(input, output) {
   ]);
 }
 
-// Sobrepõe imagem como rodapé centralizado (largura 1235px)
+// Sobrepõe imagem como rodapé centralizado com largura 1235px
 async function sobreporImagem(videoPath, imagemPath, destino) {
   console.log(`🖼️ Sobrepondo imagem ${imagemPath} sobre ${videoPath}`);
-
   const enableOverlay = 'between(t,0,9999)';
 
   await executarFFmpeg([
@@ -68,24 +67,21 @@ async function sobreporImagem(videoPath, imagemPath, destino) {
   ]);
 }
 
-// Baixa um arquivo via Rclone
+// Baixa um arquivo remoto via Rclone e move para o destino
 function baixarArquivo(remoto, destino) {
   return new Promise((resolve, reject) => {
     console.log(`⬇️ Baixando: ${remoto}`);
     const baseName = path.basename(remoto);
-    const tempDownload = `temp/${baseName}`;
 
-    const rclone = spawn('rclone', ['copy', `meudrive:${remoto}`, 'temp', '--config', keyFile]);
+    const rclone = spawn('rclone', ['copy', `meudrive:${remoto}`, '.', '--config', keyFile]);
 
     rclone.stderr.on('data', d => process.stderr.write(d.toString()));
     rclone.on('close', code => {
-      const downloadedPath = path.resolve(tempDownload);
-
       if (code !== 0) return reject(new Error(`❌ Erro ao baixar ${remoto}`));
-      if (!fs.existsSync(downloadedPath)) return reject(new Error(`❌ Arquivo não encontrado: ${downloadedPath}`));
+      if (!fs.existsSync(baseName)) return reject(new Error(`❌ Arquivo não encontrado localmente: ${baseName}`));
 
       garantirPasta(destino);
-      fs.renameSync(downloadedPath, destino);
+      fs.renameSync(baseName, destino);
       console.log(`✅ Baixado e movido para: ${destino}`);
       resolve(destino);
     });
@@ -94,14 +90,15 @@ function baixarArquivo(remoto, destino) {
 
 // Função principal
 (async () => {
-  garantirPasta('temp/dummy');
-  garantirPasta('saida/dummy');
+  // Criar pastas no início
+  ['temp', 'saida', 'temp/dummy', 'saida/dummy'].forEach(garantirPasta);
 
   const grupos = input.arquivos.split(';').map(p => p.trim()).filter(Boolean);
   const arquivosFinais = [];
 
   for (const grupo of grupos) {
     const [videoRaw, imagemRaw] = grupo.split(',').map(p => p.trim());
+
     const videoName = path.basename(videoRaw);
     const imagemName = path.basename(imagemRaw);
 
@@ -111,6 +108,10 @@ function baixarArquivo(remoto, destino) {
     const saidaFinal = `saida/overlay_${videoName}`;
 
     try {
+      // Garantir que as pastas estão prontas antes de qualquer download
+      garantirPasta(videoTemp);
+      garantirPasta(imagemTemp);
+
       await baixarArquivo(videoRaw, videoTemp);
       await baixarArquivo(imagemRaw, imagemTemp);
 
@@ -128,9 +129,11 @@ function baixarArquivo(remoto, destino) {
     process.exit(1);
   }
 
+  // Criar lista para concatenação
   const listaConcat = 'temp/lista.txt';
   fs.writeFileSync(listaConcat, arquivosFinais.map(f => `file '${path.resolve(f)}'`).join('\n'));
 
+  // Concatenar os vídeos
   const videoFinal = 'saida/video_final.mp4';
   console.log('🔗 Unindo vídeos...');
   await executarFFmpeg([
