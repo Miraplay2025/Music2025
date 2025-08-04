@@ -26,9 +26,9 @@ function garantirPasta(filePath) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-// Reencoda o vídeo e sobrepõe a imagem centralizada no rodapé
+// Reencoda o vídeo e sobrepõe a imagem como rodapé centralizado
 async function reencodeEOverlay(inputVideo, inputImage, outputVideo) {
-  console.log(`🎬 Reencodando e sobrepondo imagem em ${inputVideo}`);
+  console.log(`🎬 Reencodando e sobrepondo imagem como rodapé em ${inputVideo}`);
   garantirPasta(outputVideo);
 
   await executarFFmpeg([
