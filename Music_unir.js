@@ -3,15 +3,12 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
-// Caminho do rclone.conf
 const keyFile = path.join(os.homedir(), '.config', 'rclone', 'rclone.conf');
-
-// Ler dados do input.json
 const input = JSON.parse(fs.readFileSync('input.json', 'utf-8'));
+
 console.log('🔗 Stream URL:', input.stream_url);
 console.log('📄 Arquivos raw:', input.arquivos);
 
-// Função para executar comandos do FFmpeg
 function executarFFmpeg(args) {
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', args, { stdio: 'inherit' });
@@ -22,32 +19,32 @@ function executarFFmpeg(args) {
   });
 }
 
-// Função para reencodar o vídeo
-async function reencodeVideo(input, output) {
-  console.log(`🔄 Reencodando ${input} → ${output}`);
+async function reencodeEOverlay(inputVideo, inputImage, outputVideo) {
+  console.log(`🎬 Reencodando e sobrepondo imagem em ${inputVideo}`);
+
   await executarFFmpeg([
-    '-i', input,
-    '-vf', 'scale=1280:720,fps=60',
-    '-r', '60',
+    '-i', inputVideo,
+    '-i', inputImage,
+    '-filter_complex', '[1]scale=1235:-1[img];[0][img]overlay=W-w-20:H-h-20',
     '-c:v', 'libx264',
     '-preset', 'veryfast',
     '-crf', '23',
-    '-acodec', 'aac',
+    '-r', '60',
+    '-c:a', 'aac',
     '-b:a', '192k',
     '-ar', '44100',
     '-ac', '2',
-    output
+    outputVideo
   ]);
-  console.log(`✅ Reencodado: ${output}`);
+
+  console.log(`✅ Criado: ${outputVideo}`);
 }
 
-// Função para garantir que a pasta existe
 function garantirPasta(filePath) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-// Função para baixar arquivos com rclone
 function baixarArquivo(remoto, destino) {
   return new Promise((resolve, reject) => {
     console.log(`⬇️ Baixando: ${remoto}`);
@@ -67,13 +64,9 @@ function baixarArquivo(remoto, destino) {
   });
 }
 
-// Execução principal
 (async () => {
-  // Criar pastas principais
-  garantirPasta('saida/dummy.txt');
-  garantirPasta('temp/dummy.txt');
-
   const grupos = input.arquivos.split(';').map(p => p.trim()).filter(Boolean);
+  const arquivosFinais = [];
 
   for (const grupo of grupos) {
     const [videoRaw, imagemRaw] = grupo.split(',').map(p => p.trim());
@@ -83,20 +76,38 @@ function baixarArquivo(remoto, destino) {
 
     const videoDestino = `temp/${videoName}`;
     const imagemDestino = `temp/${imagemName}`;
-    const reencodedDestino = `saida/${videoName}`;
+    const saidaFinal = `saida/overlay_${videoName}`;
 
     try {
       await baixarArquivo(videoRaw, videoDestino);
-      garantirPasta(reencodedDestino); // 🔧 Garante que a pasta existe antes do reencode
-      await reencodeVideo(videoDestino, reencodedDestino);
       await baixarArquivo(imagemRaw, imagemDestino);
-
-      console.log(`🎬 Vídeo: ${reencodedDestino}`);
-      console.log(`🖼️ Imagem: ${imagemDestino}`);
+      await reencodeEOverlay(videoDestino, imagemDestino, saidaFinal);
+      arquivosFinais.push(saidaFinal);
     } catch (err) {
-      console.error(`❌ Erro ao processar par:\n- Vídeo: ${videoRaw}\n- Imagem: ${imagemRaw}\n`, err.message);
+      console.error(`❌ Erro ao processar:\n- Vídeo: ${videoRaw}\n- Imagem: ${imagemRaw}\n${err.message}`);
     }
   }
 
-  console.log('✅ Todos os vídeos foram processados.');
+  if (arquivosFinais.length === 0) {
+    console.error('❌ Nenhum vídeo foi processado com sucesso!');
+    process.exit(1);
+  }
+
+  // Criar arquivo de concatenação
+  const listaConcat = 'temp/lista.txt';
+  garantirPasta(listaConcat);
+  fs.writeFileSync(listaConcat, arquivosFinais.map(f => `file '${path.resolve(f)}'`).join('\n'));
+
+  // Concatenar os vídeos
+  const videoFinal = 'saida/video_final.mp4';
+  console.log('🔗 Unindo vídeos...');
+  await executarFFmpeg([
+    '-f', 'concat',
+    '-safe', '0',
+    '-i', listaConcat,
+    '-c', 'copy',
+    videoFinal
+  ]);
+
+  console.log(`🎉 Vídeo final salvo em: ${videoFinal}`);
 })();
