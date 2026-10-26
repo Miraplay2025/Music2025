@@ -19,7 +19,6 @@ export default async function handler(req, res) {
       });
     } catch (error) {
       if (testConnection) await testConnection.end();
-      // Exibe o erro real retornado pelo driver do MySQL
       return res.status(500).json({ 
         status: 'Erro de Conexão', 
         erro_real: error.message,
@@ -33,8 +32,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  // Validação do Token de Segurança
-  const TOKEN_ESPERADO = process.env.WEBHOOK_SECRET;
+  // Busca o token na variável de ambiente "SECRET"
+  const TOKEN_ESPERADO = process.env.SECRET;
   const tokenRecebido = req.headers['x-webhook-secret'] || '';
 
   if (!TOKEN_ESPERADO || tokenRecebido !== TOKEN_ESPERADO) {
