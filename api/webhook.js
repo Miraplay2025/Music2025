@@ -15,18 +15,13 @@ function getDbClient() {
   if (!databaseUrl) {
     throw new Error("DATABASE_URL não está configurada nas variáveis de ambiente.");
   }
+  // Lê diretamente a URL contendo a string completa (incluindo o ?authToken=...)
   return createClient({ url: databaseUrl });
 }
 
 export async function GET(request) {
-  let db;
   try {
-    const dbUrl = process.env.DATABASE_URL;
-    if (!dbUrl) {
-      return NextResponse.json({ status: 'Erro', mensagem: 'DATABASE_URL não está configurada nas variáveis de ambiente.' }, { status: 500, headers: headersNoCache });
-    }
-
-    db = getDbClient();
+    const db = getDbClient();
     // Testa a conexão executando uma instrução leve
     await db.execute('SELECT 1');
 
@@ -36,6 +31,7 @@ export async function GET(request) {
     }, { headers: headersNoCache });
 
   } catch (error) {
+    console.error('Erro detalhado no GET:', error);
     return NextResponse.json({ 
       status: 'Erro de Conexão', 
       erro_real: error.message,
@@ -45,11 +41,10 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  let db;
   try {
     const reqBody = await request.json().catch(() => ({}));
 
-    // Busca o token na variável de ambiente "SECRET" ou "Auteticar_token"
+    // Busca o token nas variáveis de ambiente aceitas para o webhook
     const TOKEN_ESPERADO = process.env.SECRET || process.env.Auteticar_token || process.env.AUTETICAR_TOKEN || '';
     const tokenRecebido = request.headers.get('x-webhook-secret') || request.headers.get('authorization') || '';
 
@@ -57,12 +52,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Acesso Negado: Token inválido ou não configurado.' }, { status: 403, headers: headersNoCache });
     }
 
-    const dbUrl = process.env.DATABASE_URL;
-    if (!dbUrl) {
-      return NextResponse.json({ error: 'Erro de configuração: DATABASE_URL não definida.' }, { status: 500, headers: headersNoCache });
-    }
-
-    db = getDbClient();
+    const db = getDbClient();
 
     // Cria a tabela "Atualizar-plano" caso ela não exista no padrão SQLite/Turso
     await db.execute(`
@@ -88,7 +78,7 @@ export async function POST(request) {
     }, { headers: headersNoCache });
 
   } catch (error) {
-    console.error('Erro ao processar webhook:', error);
+    console.error('Erro interno ao processar webhook:', error);
     return NextResponse.json({ 
       error: 'Erro interno ao salvar os dados.', 
       detalhes: error.message 
