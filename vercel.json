@@ -2,14 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/webhook.js",
+      "src": "api/verificar-bonus.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/(.*)",
-      "dest": "/api/webhook.js"
+      "src": "/api/verificar-bonus",
+      "dest": "api/verificar-bonus.js"
     }
   ]
 }
