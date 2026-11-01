@@ -16,20 +16,21 @@ app.use((req, res, next) => {
 });
 
 // ==========================================
-// 2. VALIDAÇÃO DE DOMÍNIO AUTORIZADO (autoedite.ct.ws)
+// 2. IMPEDIR ACESSO DIRETO VIA NAVEGADOR
+// Retorna erro padrão HTTP 403 caso o acesso seja direto (GET / navegação simples)
+// ou se a origem não for o domínio autorizado.
 // ==========================================
 app.use((req, res, next) => {
+    // Bloqueia qualquer método que não seja POST (acessos diretos pelo navegador usam GET)
     if (req.method !== 'POST') {
-        return res.status(403).json({ sucesso: false, mensagem: "Método não permitido." });
+        return res.status(403).send('Forbidden: Direct access is not allowed.');
     }
 
     const origem = req.headers['origin'] || req.headers['referer'] || req.headers['x-origem-dominio'] || '';
 
+    // Validação estrita de origem do domínio
     if (!origem || (!origem.includes('autoedite.ct.ws') && !origem.includes('localhost'))) {
-        return res.status(403).json({ 
-            sucesso: false, 
-            mensagem: "Acesso negado por política de domínio." 
-        });
+        return res.status(403).send('Forbidden: Access denied by domain policy.');
     }
 
     next();
@@ -37,7 +38,7 @@ app.use((req, res, next) => {
 
 function getDbClient() {
     const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) throw new Error("DATABASE_URL ausente nas variáveis de ambiente da Vercel.");
+    if (!databaseUrl) throw new Error("DATABASE_URL ausente.");
     return createClient({ url: databaseUrl });
 }
 
@@ -65,9 +66,9 @@ function obterDataHoraAtualPorPais(paisStr) {
 }
 
 // ==========================================
-// 3. ROTA PRINCIPAL
+// 3. ROTA PRINCIPAL: /api/verificar-bonus
 // ==========================================
-app.post('/api/verificar-bonus', async (req, res) => {
+app.post('/verificar-bonus', async (req, res) => {
     let db;
     const MENSAGEM_ERRO_PADRAO = "algo deu errado tente novamente ou entre em contato com suporte";
 
@@ -132,7 +133,7 @@ app.post('/api/verificar-bonus', async (req, res) => {
             return res.status(400).json({ 
                 sucesso: false, 
                 mensagem: MENSAGEM_ERRO_PADRAO,
-                erro_real: "Campo conta_expira ausente ou nulo na base de dados."
+                erro_real: "Campo conta_expira ausente na base de dados."
             });
         }
 
@@ -159,5 +160,9 @@ app.post('/api/verificar-bonus', async (req, res) => {
     }
 });
 
-// Exporta o app para o ambiente Serverless da Vercel
 module.exports = app;
+
+if (process.env.NODE_ENV !== 'production') {
+    const PORT = process.env.PORT || 3001;
+    app.listen(PORT);
+}
