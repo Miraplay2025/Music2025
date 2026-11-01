@@ -16,19 +16,15 @@ app.use((req, res, next) => {
 });
 
 // ==========================================
-// 2. IMPEDIR ACESSO DIRETO VIA NAVEGADOR
-// Retorna erro padrão HTTP 403 caso o acesso seja direto (GET / navegação simples)
-// ou se a origem não for o domínio autorizado.
+// 2. IMPEDIR ACESSO DIRETO VIA NAVEGADOR E VALIDAR DOMÍNIO
 // ==========================================
 app.use((req, res, next) => {
-    // Bloqueia qualquer método que não seja POST (acessos diretos pelo navegador usam GET)
     if (req.method !== 'POST') {
         return res.status(403).send('Forbidden: Direct access is not allowed.');
     }
 
     const origem = req.headers['origin'] || req.headers['referer'] || req.headers['x-origem-dominio'] || '';
 
-    // Validação estrita de origem do domínio
     if (!origem || (!origem.includes('autoedite.ct.ws') && !origem.includes('localhost'))) {
         return res.status(403).send('Forbidden: Access denied by domain policy.');
     }
@@ -66,9 +62,11 @@ function obterDataHoraAtualPorPais(paisStr) {
 }
 
 // ==========================================
-// 3. ROTA PRINCIPAL: /api/verificar-bonus
+// 3. ROTA PRINCIPAL
+// Como o ficheiro está em /api/verificar-bonus.js, 
+// a rota acessível na Vercel será /api/verificar-bonus
 // ==========================================
-app.post('/verificar-bonus', async (req, res) => {
+app.post('/api/verificar-bonus', async (req, res) => {
     let db;
     const MENSAGEM_ERRO_PADRAO = "algo deu errado tente novamente ou entre em contato com suporte";
 
@@ -160,9 +158,5 @@ app.post('/verificar-bonus', async (req, res) => {
     }
 });
 
+// Exporta o app para o servidor serverless da Vercel
 module.exports = app;
-
-if (process.env.NODE_ENV !== 'production') {
-    const PORT = process.env.PORT || 3001;
-    app.listen(PORT);
-}
