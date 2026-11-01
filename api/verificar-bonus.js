@@ -17,14 +17,12 @@ app.use((req, res, next) => {
 
 // ==========================================
 // 2. VALIDAÇÃO DE DOMÍNIO AUTORIZADO (autoedite.ct.ws)
-// O domínio é validado antes de qualquer ação ou acesso à base de dados.
 // ==========================================
 app.use((req, res, next) => {
     if (req.method !== 'POST') return res.status(403).send();
 
     const origem = req.headers['origin'] || req.headers['referer'] || req.headers['x-origem-dominio'] || '';
 
-    // Se o domínio de origem não for o oficial ou localhost, bloqueia imediatamente
     if (!origem || (!origem.includes('autoedite.ct.ws') && !origem.includes('localhost'))) {
         return res.status(403).json({ 
             sucesso: false, 
@@ -35,17 +33,12 @@ app.use((req, res, next) => {
     next();
 });
 
-// Função para instanciar o cliente do banco de dados Turso/SQLite
 function getDbClient() {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error("DATABASE_URL ausente.");
     return createClient({ url: databaseUrl });
 }
 
-// ==========================================
-// 3. FUNÇÃO DE OBTENÇÃO DE HORA ATUAL POR PAÍS
-// Usa o módulo auxiliar fuso-horario.js para calcular o tempo real no fuso correto.
-// ==========================================
 function obterDataHoraAtualPorPais(paisStr) {
     try {
         const timeZone = obterFusoPorPais(paisStr);
@@ -70,18 +63,16 @@ function obterDataHoraAtualPorPais(paisStr) {
 }
 
 // ==========================================
-// 4. ROTA PRINCIPAL: /api/verificar-bonus
+// 3. ROTA PRINCIPAL: /api/verificar-bonus
 // ==========================================
 app.post('/verificar-bonus', async (req, res) => {
     let db;
-    // Erro padrão exigido para qualquer inconsistência ou falha de sistema/conexão
     const MENSAGEM_ERRO_PADRAO = "algo deu errado tente novamente ou entre em contato com suporte";
 
     try {
         const bodyReq = req.body || {};
         const emailRecebido = bodyReq.email;
 
-        // Valida se o e-mail foi enviado corretamente no corpo da requisição
         if (!emailRecebido || typeof emailRecebido !== 'string' || !emailRecebido.includes('@')) {
             return res.status(400).json({ 
                 sucesso: false, 
@@ -91,23 +82,22 @@ app.post('/verificar-bonus', async (req, res) => {
 
         const emailLimpo = emailRecebido.trim();
 
-        // Tentativa de conexão com o Banco de Dados com tratamento de erro e sufixo "BD"
         try {
             db = getDbClient();
         } catch (dbErr) {
             return res.status(500).json({ 
                 sucesso: false, 
-                mensagem: `${MENSAGEM_ERRO_PADRAO} [ERR_CONEXAO_FALHOU] ( BD )` 
+                mensagem: `${MENSAGEM_ERRO_PADRAO} [ERR_CONEXAO_FALHOU] ( BD )`,
+                erro_real: dbErr.message || String(dbErr)
             });
         }
 
-        // Procura o usuário na tabela "auto-edite-user" ignorando maiúsculas/minúsculas e espaços
         const rsUsuario = await db.execute({
             sql: 'SELECT * FROM "auto-edite-user" WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1',
             args: [emailLimpo]
         });
 
-        // Se o usuário não for encontrado na base de dados
+        // Erros comuns (Mensagem direta)
         if (rsUsuario.rows.length === 0) {
             return res.status(404).json({ 
                 sucesso: false, 
@@ -119,7 +109,7 @@ app.post('/verificar-bonus', async (req, res) => {
         const statusUser = String(usuarioEncontrado.status || '').trim().toLowerCase();
         const planoUser = String(usuarioEncontrado.plano || '').trim().toLowerCase();
 
-        // Valida se a conta está com status verificado
+        // Erro comum (Mensagem direta)
         if (statusUser !== 'verificado') {
             return res.status(403).json({ 
                 sucesso: false, 
@@ -127,7 +117,7 @@ app.post('/verificar-bonus', async (req, res) => {
             });
         }
 
-        // Valida se o plano atual do usuário é estritamente "gratuito". Se for diferente, retorna a mensagem solicitada.
+        // Erro comum (Mensagem direta)
         if (planoUser !== 'gratuito') {
             return res.status(400).json({ 
                 sucesso: false, 
@@ -135,22 +125,21 @@ app.post('/verificar-bonus', async (req, res) => {
             });
         }
 
-        // Obtém o fuso horário e a hora atual do país cadastrado do usuário
         const paisUser = usuarioEncontrado.pais || 'Brasil';
         const dataHoraAtualPais = obterDataHoraAtualPorPais(paisUser);
         const dataExpiraStr = usuarioEncontrado.conta_expira;
 
-        // Se a data de expiração estiver vazia ou ausente, retorna o erro padrão
         if (!dataExpiraStr) {
             return res.status(400).json({ 
                 sucesso: false, 
-                mensagem: MENSAGEM_ERRO_PADRAO 
+                mensagem: MENSAGEM_ERRO_PADRAO,
+                erro_real: "Campo conta_expira ausente ou nulo na base de dados."
             });
         }
 
         const dataExpiraDate = new Date(dataExpiraStr.replace(' ', 'T'));
 
-        // Compara se o tempo atual do país já ultrapassou a data de expiração do bônus
+        // Erro comum (Mensagem direta)
         if (dataHoraAtualPais > dataExpiraDate) {
             return res.status(400).json({ 
                 sucesso: false, 
@@ -158,17 +147,18 @@ app.post('/verificar-bonus', async (req, res) => {
             });
         }
 
-        // Caso todas as validações passem com sucesso:
+        // Sucesso
         return res.status(200).json({
             sucesso: true,
             mensagem: "bonus aprovado com sucesso"
         });
 
     } catch (error) {
-        // Qualquer erro inesperado retorna estritamente o erro padrão
+        // Retorna a mensagem padrão + o detalhe do erro real para salvar nos logs no PHP
         return res.status(500).json({ 
             sucesso: false, 
-            mensagem: MENSAGEM_ERRO_PADRAO 
+            mensagem: MENSAGEM_ERRO_PADRAO,
+            erro_real: error.message || String(error)
         });
     }
 });
