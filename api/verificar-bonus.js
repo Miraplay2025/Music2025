@@ -19,7 +19,9 @@ app.use((req, res, next) => {
 // 2. VALIDAÇÃO DE DOMÍNIO AUTORIZADO (autoedite.ct.ws)
 // ==========================================
 app.use((req, res, next) => {
-    if (req.method !== 'POST') return res.status(403).send();
+    if (req.method !== 'POST') {
+        return res.status(403).json({ sucesso: false, mensagem: "Método não permitido." });
+    }
 
     const origem = req.headers['origin'] || req.headers['referer'] || req.headers['x-origem-dominio'] || '';
 
@@ -35,7 +37,7 @@ app.use((req, res, next) => {
 
 function getDbClient() {
     const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) throw new Error("DATABASE_URL ausente.");
+    if (!databaseUrl) throw new Error("DATABASE_URL ausente nas variáveis de ambiente da Vercel.");
     return createClient({ url: databaseUrl });
 }
 
@@ -63,9 +65,9 @@ function obterDataHoraAtualPorPais(paisStr) {
 }
 
 // ==========================================
-// 3. ROTA PRINCIPAL: /api/verificar-bonus
+// 3. ROTA PRINCIPAL
 // ==========================================
-app.post('/verificar-bonus', async (req, res) => {
+app.post('/api/verificar-bonus', async (req, res) => {
     let db;
     const MENSAGEM_ERRO_PADRAO = "algo deu errado tente novamente ou entre em contato com suporte";
 
@@ -97,7 +99,6 @@ app.post('/verificar-bonus', async (req, res) => {
             args: [emailLimpo]
         });
 
-        // Erros comuns (Mensagem direta)
         if (rsUsuario.rows.length === 0) {
             return res.status(404).json({ 
                 sucesso: false, 
@@ -109,7 +110,6 @@ app.post('/verificar-bonus', async (req, res) => {
         const statusUser = String(usuarioEncontrado.status || '').trim().toLowerCase();
         const planoUser = String(usuarioEncontrado.plano || '').trim().toLowerCase();
 
-        // Erro comum (Mensagem direta)
         if (statusUser !== 'verificado') {
             return res.status(403).json({ 
                 sucesso: false, 
@@ -117,7 +117,6 @@ app.post('/verificar-bonus', async (req, res) => {
             });
         }
 
-        // Erro comum (Mensagem direta)
         if (planoUser !== 'gratuito') {
             return res.status(400).json({ 
                 sucesso: false, 
@@ -139,7 +138,6 @@ app.post('/verificar-bonus', async (req, res) => {
 
         const dataExpiraDate = new Date(dataExpiraStr.replace(' ', 'T'));
 
-        // Erro comum (Mensagem direta)
         if (dataHoraAtualPais > dataExpiraDate) {
             return res.status(400).json({ 
                 sucesso: false, 
@@ -147,14 +145,12 @@ app.post('/verificar-bonus', async (req, res) => {
             });
         }
 
-        // Sucesso
         return res.status(200).json({
             sucesso: true,
             mensagem: "bonus aprovado com sucesso"
         });
 
     } catch (error) {
-        // Retorna a mensagem padrão + o detalhe do erro real para salvar nos logs no PHP
         return res.status(500).json({ 
             sucesso: false, 
             mensagem: MENSAGEM_ERRO_PADRAO,
@@ -163,9 +159,5 @@ app.post('/verificar-bonus', async (req, res) => {
     }
 });
 
+// Exporta o app para o ambiente Serverless da Vercel
 module.exports = app;
-
-if (process.env.NODE_ENV !== 'production') {
-    const PORT = process.env.PORT || 3001;
-    app.listen(PORT);
-}
